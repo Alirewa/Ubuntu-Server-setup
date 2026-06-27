@@ -28,11 +28,14 @@ module_security() {
 - UFW enabled: default-deny incoming, default-allow outgoing. Only ports explicitly
   opened by svsetup modules (SSH, and later Coolify/x-ui ports) are reachable.
 - Fail2ban watches sshd and bans IPs after repeated failed logins (default jail).
-- SSH hardened at a SAFE/medium level: root login over SSH disabled
-  (PermitRootLogin no), empty passwords disabled, max auth tries lowered.
-  Your SSH port and password authentication were left UNCHANGED so this step
-  cannot lock you out. Run `svsetup --ssh-strict` later if you want to switch to a
-  custom port + key-only auth once you've confirmed key-based login works.
+- SSH hardened at a SAFE/medium level: empty passwords disabled, max auth tries
+  lowered, SSH port and password authentication left UNCHANGED. Root login over SSH
+  (PermitRootLogin no) is ONLY disabled if a non-root sudo user with an SSH key
+  already exists as a fallback — otherwise it's deliberately left enabled, because
+  disabling it with no other way in would permanently lock you out. If you saw a
+  prompt offering to create a sudo admin user, that's what this check was for.
+  Run `svsetup --ssh-strict` later if you want to switch to a custom port + key-only
+  auth once you've confirmed key-based login works.
 - unattended-upgrades installed: Ubuntu security patches are applied automatically.
 EOF
 
@@ -67,19 +70,76 @@ EOF
 
 setup_ssh() {
   local sshd_conf=/etc/ssh/sshd_config.d/99-svsetup.conf
-  cat > "$sshd_conf" <<'EOF'
-# Managed by svsetup — medium-risk hardening profile.
-# Port and PasswordAuthentication intentionally left untouched here.
-PermitRootLogin no
-PermitEmptyPasswords no
+  local base_rules='PermitEmptyPasswords no
 MaxAuthTries 4
 X11Forwarding no
 ClientAliveInterval 300
-ClientAliveCountMax 2
-EOF
+ClientAliveCountMax 2'
+
+  if has_alternate_admin_access; then
+    printf '%s\n' "# Managed by svsetup — medium-risk hardening profile." \
+                  "# Port and PasswordAuthentication intentionally left untouched here." \
+                  "PermitRootLogin no" "$base_rules" > "$sshd_conf"
+    ok "SSH hardened (root login disabled — a sudo user with an SSH key was found as a fallback)."
+  elif confirm "No other sudo user with an SSH key was found. Create one now so root login can be safely disabled?" "Y"; then
+    create_admin_user
+    printf '%s\n' "# Managed by svsetup — medium-risk hardening profile." \
+                  "# Port and PasswordAuthentication intentionally left untouched here." \
+                  "PermitRootLogin no" "$base_rules" > "$sshd_conf"
+    ok "SSH hardened (root login disabled, new sudo user is your fallback)."
+  else
+    printf '%s\n' "# Managed by svsetup — medium-risk hardening profile." \
+                  "# PermitRootLogin intentionally NOT changed: no alternate sudo/SSH-key user" \
+                  "# exists, and disabling it here would permanently lock you out." \
+                  "$base_rules" > "$sshd_conf"
+    warn "Root login over SSH was left ENABLED — disabling it with no fallback admin user"
+    warn "would have locked you out permanently (this happened to real users before this fix)."
+    warn "Create a sudo user with an SSH key, then re-run this step to harden root login."
+  fi
+
   sshd -t && systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true
-  ok "SSH hardened (root login disabled). Port/password-auth unchanged for safety."
   warn "Optional stricter profile (custom port + key-only auth) available via: svsetup --ssh-strict"
+}
+
+# has_alternate_admin_access — true if a non-root user in the `sudo` group has at
+# least one SSH key already authorized. Disabling PermitRootLogin is only safe
+# when this is true; otherwise root would be the only way in and SSH would lock
+# out completely the moment root login is refused.
+has_alternate_admin_access() {
+  local members u home
+  members="$(getent group sudo 2>/dev/null | cut -d: -f4)" || true
+  IFS=',' read -ra members <<< "$members"
+  for u in "${members[@]}"; do
+    [ -z "$u" ] && continue
+    home="$(getent passwd "$u" 2>/dev/null | cut -d: -f6)" || true
+    [ -n "$home" ] && [ -s "${home}/.ssh/authorized_keys" ] && return 0
+  done
+  return 1
+}
+
+# create_admin_user — interactively create a sudo user and give it an SSH key,
+# either by copying root's existing authorized_keys (the safe non-interactive
+# default on a fresh VPS) or a key the operator pastes in.
+create_admin_user() {
+  local username
+  ask username "Username for the new sudo admin user" "admin"
+  if ! id "$username" >/dev/null 2>&1; then
+    adduser --disabled-password --gecos "" "$username"
+  fi
+  usermod -aG sudo "$username"
+  local home="/home/${username}"
+  mkdir -p "${home}/.ssh"
+  if [ -s /root/.ssh/authorized_keys ] && confirm "Copy root's current SSH key(s) to ${username} (recommended)?" "Y"; then
+    cp /root/.ssh/authorized_keys "${home}/.ssh/authorized_keys"
+  else
+    local pubkey
+    ask pubkey "Paste a public SSH key for ${username} (blank to skip)" ""
+    [ -n "$pubkey" ] && echo "$pubkey" >> "${home}/.ssh/authorized_keys"
+  fi
+  chmod 700 "${home}/.ssh"
+  chmod 600 "${home}/.ssh/authorized_keys" 2>/dev/null || true
+  chown -R "${username}:${username}" "${home}/.ssh"
+  ok "Sudo user '${username}' created. Test logging in as ${username} in a NEW terminal before closing this session."
 }
 
 # Optional, explicit opt-in — never run automatically.

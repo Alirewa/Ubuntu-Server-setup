@@ -157,6 +157,29 @@ sudo svsetup --all         # everything in one go
 sudo svsetup --ssh-strict  # opt-in: custom SSH port + key-only auth
 ```
 
+## Troubleshooting: locked out of root SSH login
+
+Versions before the fix in this section unconditionally disabled root SSH login
+(`PermitRootLogin no`) during the security step. On a fresh VPS (Hetzner and most
+providers) **root is the only account**, so this could block all SSH access — your
+password was never changed, SSH just refuses root entirely. Resetting the root
+password from your provider's panel does **not** fix this, since the password was
+never the problem.
+
+**Fix without reinstalling the server:** use your provider's *web console* (Hetzner:
+server → **Console**, a VNC/serial terminal in the browser) — it logs in locally and
+is not affected by `sshd` restrictions. Then run:
+
+```bash
+rm -f /etc/ssh/sshd_config.d/99-svsetup.conf
+systemctl restart ssh
+```
+
+SSH access is restored immediately. Current versions of svsetup only disable root
+login when a non-root sudo user with an SSH key already exists as a fallback —
+otherwise it leaves root login enabled and offers to create that sudo user for you
+first.
+
 ## Resilience
 
 Every menu option runs inside an isolated subshell — if a module hits an error
