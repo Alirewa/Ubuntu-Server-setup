@@ -122,14 +122,30 @@ BuildKit cache, independent of running the full initial setup, and prints what's
 currently active (congestion control algorithm, swap status, BuildKit cache
 presence). Safe to run any time.
 
-### 8) Update svsetup itself
+### 8) Docker container management
+A `docker ps`-style table (name, state, published ports, image) for every
+container on the box, plus actions: start, stop, restart, tail logs, remove a
+container (its image/volumes are kept), and a one-shot view of every host port
+Docker currently publishes — so you can see at a glance what's running and
+exactly which ports each container is using.
+
+### 9) Edit important files
+Lists the security-relevant config files svsetup manages (SSH hardening rules,
+main `sshd_config`, the Fail2ban jail, sysctl tuning, Docker's `daemon.json`,
+3x-ui's `docker-compose.yml`, open-file limits, crontab, `/etc/hosts`) and opens
+your pick in `$EDITOR` (or `nano`). Backs up before editing; SSH/JSON/Compose
+files are validated after saving and automatically rolled back if the edit would
+break them, instead of leaving you with a config that locks you out or won't start.
+
+### 10) Status / logs
+Quick status view of which modules have run, plus pointers to the full on-server
+documentation (`/root/svsetup-README.txt`) and an option to print the last 30
+lines of the log right there — the fastest way to check what just happened.
+
+### 11) Self-update
 Pulls the latest version of this toolkit directly from GitHub (`git fetch` +
 `reset --hard origin/main` in `/opt/svsetup`) and restarts the menu on the new
 version — no need to re-run the curl one-liner.
-
-### 9) Show installed components / docs
-Quick status view of which modules have run, plus pointers to the full on-server
-documentation (`/root/svsetup-README.txt`) and the log file.
 
 ### Bonus: per-install port prompts
 Before Coolify and each Telegram bot actually installs, svsetup asks if that
@@ -138,11 +154,13 @@ about — so the firewall stays in sync with whatever you're deploying, without
 having to remember to open ports manually afterward. (3x-ui is the one exception:
 its port range is fixed and opened automatically, with no prompt — see step 3.)
 
-### 10) Reset — undo everything svsetup installed
+### 12) Reset — undo everything svsetup installed
 Walks through every component svsetup can install (Telegram bots, 3x-ui, Coolify,
 Docker, firewall/SSH hardening, sysctl/swap tuning, extra packages) and offers to
 remove each one, with its own confirmation — destructive steps (Coolify's data,
-purging Docker) need an explicit yes. Requires typing `RESET` once up front.
+purging Docker) need an explicit yes. Requires typing `RESET` once up front. This
+(and Exit) are deliberately last in the menu since they're the options you'll use
+least often.
 
 **You never need to reinstall or reset the underlying server (the OS) to undo this
 toolkit.** Everything it does — installing packages, opening firewall ports, writing
@@ -152,26 +170,11 @@ you've been experimenting and want a clean slate, just run:
 
 ```bash
 sudo svsetup --reset
-# or, from the menu: option 10
+# or, from the menu: option 12
 ```
 
 then re-run the one-line installer (or `sudo svsetup --all`) to start fresh — no
 VPS/OS reinstall needed.
-
-### 11) Docker container management
-A `docker ps`-style table (name, state, published ports, image) for every
-container on the box, plus actions: start, stop, restart, tail logs, remove a
-container (its image/volumes are kept), and a one-shot view of every host port
-Docker currently publishes — so you can see at a glance what's running and
-exactly which ports each container is using.
-
-### 12) Edit important files
-Lists the security-relevant config files svsetup manages (SSH hardening rules,
-main `sshd_config`, the Fail2ban jail, sysctl tuning, Docker's `daemon.json`,
-3x-ui's `docker-compose.yml`, open-file limits, crontab, `/etc/hosts`) and opens
-your pick in `$EDITOR` (or `nano`). Backs up before editing; SSH/JSON/Compose
-files are validated after saving and automatically rolled back if the edit would
-break them, instead of leaving you with a config that locks you out or won't start.
 
 ## Non-interactive flags
 
@@ -214,7 +217,28 @@ login when a non-root sudo user with an SSH key already exists as a fallback —
 otherwise it leaves root login enabled and offers to create that sudo user for you
 first.
 
-## Resilience
+## Running options out of order, and not stepping on yourself
+
+You can run the menu options in **any order** — there's no requirement to go
+1, 2, 3... in sequence:
+- Anything that needs Docker (Coolify, 3x-ui) calls a shared `ensure_docker`
+  helper first, which checks for the real `docker` command rather than a
+  "did module X run" flag. So `3x-ui` before `Initial setup`, or `Coolify`
+  before `3x-ui`, both just install Docker on the spot if it isn't there yet —
+  no matter which order you hit them in, or how Docker ended up on the box
+  (svsetup's own installer, or a bot's `get.docker.com` install).
+- Every module writes to its own dedicated files (`99-svsetup.conf` configs,
+  its own directory under `/opt`, its own systemd unit/container name) — two
+  different options never write to the *same* file, so installing them in any
+  order doesn't overwrite each other's work.
+- **Concurrent runs are locked, not racy.** `svsetup` takes an exclusive
+  `flock` on a lock file the moment it starts. If you (or a teammate) open a
+  second SSH session and run `svsetup` while one is already mid-install, the
+  second one refuses immediately with "another svsetup process is already
+  running" instead of two processes writing `sysctl.conf`/`ufw`/`daemon.json`
+  at the same time and corrupting one or the other's change.
+
+## Resilience & debugging
 
 Every menu option runs inside an isolated subshell — if a module hits an error
 (network blip, a package failing to install, etc.) you get an error message and
@@ -222,6 +246,11 @@ land back on the menu instead of the whole `svsetup` session dying. An earlier
 version had a bug where SSH-port detection (`ss | grep ...`) could fail and silently
 kill the entire session under `set -e`, which is exactly the class of failure this
 subshell wrapping now contains.
+
+Every run also writes a **full transcript** — not just curated status lines, but
+the raw output of every command — to `/var/log/svsetup/svsetup.log`. If something
+fails, that log has the real error message; menu option 10 (Status / logs) can
+print the last 30 lines on the spot without leaving the menu.
 
 ## Firewall ports reference
 
@@ -247,7 +276,7 @@ enforced with plain Docker resource limits — no special scheduler needed:
   using too many resources, they can be capped the same way via a systemd drop-in
   (auto-sender, drive-uploader) or a `cpus`/`mem_limit` entry (drive-uploader's
   Docker-based Bot API container).
-- Use menu option 11 (Docker container management) any time to see what's
+- Use menu option 8 (Docker container management) any time to see what's
   actually running and how its ports are mapped.
 
 ## On-server documentation

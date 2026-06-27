@@ -20,7 +20,7 @@ XUI_CPUS="${SVSETUP_XUI_CPUS:-0.5}"
 XUI_MEM="${SVSETUP_XUI_MEM:-512m}"
 
 module_xui() {
-  is_done "docker" || die "Docker is required first — run option 1, or module 03, first."
+  ensure_docker
 
   header "3x-ui (Sanaei panel) — Docker install"
   info "Following the official Docker install method from the 3x-ui repo itself"

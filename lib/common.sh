@@ -152,6 +152,15 @@ EOF
   ok "sysctl tuning applied (BBR congestion control, larger backlogs, swappiness=10)"
 }
 
+# ensure_docker — install Docker only if it's not actually present yet. Checks
+# the real `docker` command, not the is_done("docker") marker, so this stays
+# correct regardless of HOW Docker got installed (our module 03, or a bot's
+# own installer running get.docker.com) and regardless of what order the menu
+# options were run in. Safe to call from any module that needs Docker.
+ensure_docker() {
+  command -v docker >/dev/null 2>&1 || module_docker
+}
+
 # enable_buildkit_cache — shared by Coolify install and the speed module.
 enable_buildkit_cache() {
   command -v docker >/dev/null 2>&1 || return 0

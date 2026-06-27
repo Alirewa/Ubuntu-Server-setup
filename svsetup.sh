@@ -1,10 +1,27 @@
 #!/usr/bin/env bash
 # svsetup — interactive control panel for Ubuntu-Server-setup.
-# Re-run any time: `sudo svsetup`. Every module is idempotent/safe to repeat.
+# Re-run any time: `sudo svsetup`. Every module is idempotent/safe to repeat,
+# in any order — see lib/common.sh's ensure_docker() and is_done()/mark_done().
 set -euo pipefail
 SVSETUP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/common.sh
 source "${SVSETUP_DIR}/lib/common.sh"
+
+# Single-instance lock: prevents two svsetup runs (e.g. two SSH sessions)
+# from writing the same files — sysctl conf, ufw rules, daemon.json, state
+# markers — at the same time and corrupting each other's changes.
+SVSETUP_LOCK_FILE="${SVSETUP_STATE_DIR}/svsetup.lock"
+exec 9>"$SVSETUP_LOCK_FILE"
+if ! flock -n 9; then
+  echo "Another svsetup process is already running on this server." >&2
+  echo "Wait for it to finish, then try again. (Lock: ${SVSETUP_LOCK_FILE})" >&2
+  exit 1
+fi
+
+# Full transcript logging: every line this script and the commands it runs
+# print (not just the curated info/ok/warn/err lines) is appended to the log,
+# so a failure can be debugged after the fact without having to reproduce it.
+exec > >(tee -a "$SVSETUP_LOG_FILE") 2> >(tee -a "$SVSETUP_LOG_FILE" >&2)
 
 # shellcheck source=modules/01-init.sh
 source "${SVSETUP_DIR}/modules/01-init.sh"
@@ -38,7 +55,7 @@ run_initial_setup() {
 }
 
 coolify_with_deps() {
-  is_done "docker" || module_docker
+  ensure_docker
   module_coolify
 }
 
@@ -48,8 +65,12 @@ show_status() {
     if is_done "$s"; then ok "$s"; else warn "$s — not installed yet"; fi
   done
   echo
-  info "Full doc / per-component notes: ${SVSETUP_INFO_FILE}"
-  info "Logs: ${SVSETUP_LOG_FILE}"
+  info "Full docs: ${SVSETUP_INFO_FILE}"
+  info "Log file:  ${SVSETUP_LOG_FILE}  (full transcript of every run — start here when debugging)"
+  if confirm "Show the last 30 log lines now?" "N"; then
+    echo
+    tail -n 30 "$SVSETUP_LOG_FILE" 2>/dev/null || warn "Log file is empty or not readable yet."
+  fi
   press_enter
 }
 
@@ -65,11 +86,11 @@ print_menu() {
   echo "  5) Extra packages"
   echo "  6) Firewall"
   echo "  7) Speed boost"
-  echo "  8) Self-update"
-  echo "  9) Status"
-  echo " 10) Reset / uninstall"
-  echo " 11) Docker containers"
-  echo " 12) Edit config files"
+  echo "  8) Docker containers"
+  echo "  9) Edit config files"
+  echo " 10) Status / logs"
+  echo " 11) Self-update"
+  echo " 12) Reset / uninstall"
   echo "  0) Exit"
   echo
 }
@@ -101,11 +122,11 @@ main_menu() {
       5) run_step "Extra packages" module_extras ;;
       6) module_firewall ;;
       7) run_step "Speed boost" module_speed ;;
-      8) update_self ;;
-      9) show_status ;;
-      10) module_reset; press_enter ;;
-      11) module_docker_manage ;;
-      12) module_edit_files ;;
+      8) module_docker_manage ;;
+      9) module_edit_files ;;
+      10) show_status ;;
+      11) update_self ;;
+      12) module_reset; press_enter ;;
       0) exit 0 ;;
       *) warn "Invalid choice" ;;
     esac
@@ -114,7 +135,7 @@ main_menu() {
 
 usage() {
   cat <<EOF
-Usage: svsetup [--init|--coolify|--xui|--bots|--extras|--firewall|--speed|--update|--reset|--docker|--edit|--all|--ssh-strict]
+Usage: svsetup [--init|--coolify|--xui|--bots|--extras|--firewall|--speed|--docker|--edit|--update|--reset|--all|--ssh-strict]
 No flags: opens the interactive menu.
 EOF
 }
@@ -124,16 +145,16 @@ require_ubuntu
 
 case "${1:-}" in
   --init)       run_initial_setup ;;
-  --coolify)    is_done "docker" || module_docker; module_coolify ;;
+  --coolify)    coolify_with_deps ;;
   --xui)        module_xui ;;
   --bots)       module_bots ;;
   --extras)     module_extras ;;
   --firewall)   module_firewall ;;
   --speed)      module_speed ;;
-  --update)     update_self ;;
-  --reset)      module_reset ;;
   --docker)     module_docker_manage ;;
   --edit)       module_edit_files ;;
+  --update)     update_self ;;
+  --reset)      module_reset ;;
   --ssh-strict) ssh_strict_profile ;;
   --all)        run_initial_setup; module_coolify; module_xui; module_extras ;;
   -h|--help)    usage ;;

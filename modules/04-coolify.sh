@@ -10,7 +10,7 @@ source "${SCRIPT_DIR}/lib/common.sh"
 COOLIFY_PORTS=(22 80 443 8000 6001 6002)
 
 module_coolify() {
-  require_module "docker" "Docker (run option 3 / module 03 first)"
+  ensure_docker
 
   header "Coolify"
   if command -v coolify >/dev/null 2>&1 || [ -d /data/coolify ]; then
@@ -54,16 +54,11 @@ Why deployed sites can feel slow right after a deploy, and what was done about i
      not a server-package problem, and no Ubuntu package can fully substitute for it.
 
 Resource priority: Coolify's Docker containers are left UNCAPPED (no cpus/mem limits).
-x-ui (installed natively, not in Docker) is capped via systemd instead — see [05].
+x-ui's container is capped via cpus/mem_limit in its own docker-compose.yml instead — see [05].
 EOF
 
   mark_done "coolify"
   ok "Coolify setup complete"
-}
-
-require_module() {
-  local name="$1" hint="$2"
-  is_done "$name" || die "Missing prerequisite: ${hint}"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
