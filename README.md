@@ -1,9 +1,36 @@
-# Ubuntu-Server-setup
+# Ubuntu-Server-setup — Automated Ubuntu 22.04/24.04 VPS Setup Script
 
-One-command bootstrap + interactive control panel (`svsetup`) for a fresh Ubuntu
-22.04/24.04 VPS: system hardening and performance tuning, then a menu to install
-whichever of your usual stack you need — **Coolify**, **3x-ui**, or your Telegram
-bots — with sane defaults, firewall rules, and zero conflicts between them.
+**One-command bootstrap and interactive control panel (`svsetup`) for a fresh Ubuntu
+server**: automatic security hardening, firewall configuration, and network speed
+tuning (TCP BBR), plus a menu to install **Coolify** (self-hosted deploy platform),
+**3x-ui / Sanaei panel** (Xray VPN panel), and **Telegram bots** — all isolated from
+each other, with the firewall and resource limits handled for you.
+
+Built for anyone who spins up a fresh Ubuntu VPS and wants a repeatable, scripted way
+to go from a blank server to a hardened, production-ready box in minutes instead of
+manually running the same fifteen commands every time.
+
+## Features
+
+- **One-line install** — a single `curl | bash` command sets up everything and drops
+  you into an interactive menu (`svsetup`), reusable any time afterward.
+- **Security hardening** — UFW firewall (default-deny), Fail2ban for SSH
+  brute-force protection, safe SSH hardening (no lockout risk), automatic security
+  updates.
+- **Performance tuning** — TCP BBR congestion control, sysctl/network tuning, swap
+  configuration, and Docker BuildKit caching to speed up page loads and deploys.
+- **Coolify installer** — official latest release, firewall ports opened
+  automatically, configured to get resource priority over everything else.
+- **3x-ui (Sanaei) installer** — official latest release, with automatic firewall
+  rules and CPU/RAM limits so it never competes with Coolify for resources.
+- **Telegram bot deployment** — one-command install for
+  [tg-bot-auto-sender](https://github.com/Alirewa/tg-bot-auto-sender) and
+  [tg-bot-uploader-drive](https://github.com/Alirewa/tg-bot-uploader-drive).
+- **Firewall management menu** — list, add, or remove UFW rules without memorizing
+  `ufw` syntax.
+- **Self-update** — pulls the latest version of this toolkit straight from GitHub.
+- **Full reset/uninstall** — undo everything svsetup installed without ever needing
+  to reinstall the server's OS.
 
 ## Install
 
@@ -84,7 +111,11 @@ Pulls the latest version of this toolkit directly from GitHub (`git fetch` +
 `reset --hard origin/main` in `/opt/svsetup`) and restarts the menu on the new
 version — no need to re-run the curl one-liner.
 
-### Per-install port prompts
+### 9) Show installed components / docs
+Quick status view of which modules have run, plus pointers to the full on-server
+documentation (`/root/svsetup-README.txt`) and the log file.
+
+### Bonus: per-install port prompts
 Before Coolify, 3x-ui, and each Telegram bot actually installs, svsetup asks if
 that specific install needs any extra firewall ports beyond what it already knows
 about — so the firewall stays in sync with whatever you're deploying, without
@@ -160,3 +191,11 @@ Coolify is the priority workload (~80% of server resources by design):
 Every module appends a section to `/root/svsetup-README.txt` as it runs, explaining
 what it installed, why, and how to manage it (service names, ports, CLIs). Logs live
 in `/var/log/svsetup/svsetup.log`.
+
+## Keywords
+
+Ubuntu server setup script, Ubuntu 24.04 VPS automation, Coolify install script,
+3x-ui Sanaei panel install, Xray VPN panel Ubuntu, UFW firewall management script,
+TCP BBR speed optimization, Telegram bot VPS deployment, Docker Ubuntu server setup,
+SSH hardening script, Fail2ban Ubuntu, self-hosted server bootstrap, sysadmin
+automation script.
