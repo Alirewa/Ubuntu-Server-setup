@@ -121,7 +121,7 @@ main_menu() {
     case "$choice" in
       1) run_step "Initial server setup" run_initial_setup ;;
       2) run_step "Coolify setup" coolify_with_deps ;;
-      3) run_step "3x-ui setup" module_xui ;;
+      3) module_xui ;;
       4) run_step "Telegram bots" module_bots ;;
       5) run_step "Extra packages" module_extras ;;
       6) module_firewall ;;
@@ -150,7 +150,7 @@ require_ubuntu
 case "${1:-}" in
   --init)       run_initial_setup ;;
   --coolify)    coolify_with_deps ;;
-  --xui)        module_xui ;;
+  --xui)        xui_install_or_update ;;
   --bots)       module_bots ;;
   --extras)     module_extras ;;
   --firewall)   module_firewall ;;
@@ -160,7 +160,7 @@ case "${1:-}" in
   --update)     update_self ;;
   --reset)      module_reset ;;
   --ssh-strict) ssh_strict_profile ;;
-  --all)        run_initial_setup; module_coolify; module_xui; module_extras ;;
+  --all)        run_initial_setup; module_coolify; xui_install_or_update; module_extras ;;
   -h|--help)    usage ;;
   "")           main_menu ;;
   *)            usage; exit 1 ;;

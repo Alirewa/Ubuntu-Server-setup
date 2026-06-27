@@ -86,12 +86,16 @@ reset_xui() {
       [ -f /opt/3x-ui/docker-compose.yml ] && ( cd /opt/3x-ui && docker compose down --rmi local --volumes >/dev/null 2>&1 || true )
       docker rm -f 3xui_app >/dev/null 2>&1 || true
       rm -rf /opt/3x-ui
-      ok "Docker-based 3x-ui removed"
+      rm -f /usr/local/bin/x-ui
+      ok "Docker-based 3x-ui removed (including the 'x-ui' host shim)"
     }
   fi
 
   # Legacy (pre-Docker, native systemd) install, in case this server still has one.
-  if command -v x-ui >/dev/null 2>&1 || [ -d /usr/local/x-ui ]; then
+  # Note: don't key this off `command -v x-ui` alone — the current Docker install
+  # also provides an `x-ui` host command (a thin proxy), which would otherwise
+  # always look like a leftover legacy install.
+  if [ -d /usr/local/x-ui ] || [ -f /etc/systemd/system/x-ui.service ]; then
     found=1
     confirm "A legacy native (non-Docker) 3x-ui install was also found — remove it too?" "N" && {
       systemctl disable --now x-ui >/dev/null 2>&1 || true

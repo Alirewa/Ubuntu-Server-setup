@@ -21,9 +21,11 @@ manually running the same fifteen commands every time.
   configuration, and Docker BuildKit caching to speed up page loads and deploys.
 - **Coolify installer** — official latest release, firewall ports opened
   automatically, configured to get resource priority over everything else.
-- **3x-ui (Sanaei) installer** — built and run via Docker, following the official
-  `docker-compose.yml` from the 3x-ui repo itself, with fixed credentials/port/path
-  and CPU/RAM limits so it never competes with Coolify for resources.
+- **3x-ui (Sanaei) submenu** — built and run via Docker (official `docker-compose.yml`
+  from the 3x-ui repo itself), with install/update, domain & SSL certificate setup
+  (the real native console, restored as a host `x-ui` command too), login settings,
+  status, and removal — fixed credentials/port/path and CPU/RAM limits so it never
+  competes with Coolify for resources.
 - **Docker container management menu** — see every container svsetup (or anything
   else) started, its state and published ports, with start/stop/restart/logs/remove.
 - **Telegram bot deployment** — one-command install for
@@ -80,23 +82,36 @@ on 80/443 and a second proxy would only get in its way.
 svsetup clones the [3x-ui repo](https://github.com/MHSanaei/3x-ui) into
 `/opt/3x-ui` and builds/runs it with Docker using **the project's own official
 `docker-compose.yml` and `Dockerfile`** — no native/systemd install, fully
-isolated from the host. No prompts:
+isolated from the host. This option is its own submenu:
 
-- **Login:** `admin` / `admin` (the panel's own default — change it from inside
-  the panel after your first login).
-- **URL:** `http://<server-ip>:2080/webdw/`
-- **Firewall:** ports `2080-2090` (tcp+udp) are opened automatically — `2080` is
-  the panel, the rest is headroom for Xray inbounds you add later, with no
-  separate firewall prompt needed.
-- **Resources:** the container is capped at `cpus: 0.5`, `mem_limit: 512m` directly
-  in its `docker-compose.yml` — the same plain Docker resource-limit mechanism
-  Coolify's own containers just don't have applied to them, which is what keeps
-  Coolify the priority workload.
+1. **Install / update** — no prompts. Login `admin`/`admin` (the panel's own
+   default), URL `http://<server-ip>:2080/webdw/`. Container capped at
+   `cpus: 0.5`, `mem_limit: 512m` in its `docker-compose.yml` — the same plain
+   Docker resource-limit mechanism Coolify's containers just don't have
+   applied to them, which keeps Coolify the priority workload. Also restores
+   a plain **`x-ui` command on the host** (a thin `docker exec` proxy), so
+   typing `x-ui` works exactly like it did on a native install.
+2. **Domain & SSL certificate** — opens the exact same native console as
+   typing `x-ui` (or as a native, non-Docker install) — domain binding,
+   Let's Encrypt certs via the bundled acme.sh (domain-based or IP-based),
+   custom cert paths, renewal, etc. Nothing was reimplemented here; the real
+   `x-ui` management CLI ships inside the image and is fully Docker-aware.
+3. **Login settings** — change username/password/port/web path; if the port
+   changes, the Docker port mapping is regenerated and the container restarted
+   automatically.
+4. **Show status & URL**.
+5. **Remove 3x-ui**.
+
+**Ports:** `2080-2090` (tcp+udp) are published from the container *and* opened
+in the firewall — not just one of the two. `2080` is the panel; the rest is
+headroom for Xray inbounds and, importantly, for acme.sh's HTTP-01 challenge
+listener if you request a Let's Encrypt certificate for a domain (port 80 is
+Coolify's, so when the console asks for a challenge port, pick a free one in
+this range — it's already reachable both at the Docker and firewall layer).
 
 The first install builds the panel from source inside Docker (Go + the Vite
 frontend), so it can take a few minutes and briefly needs ~1-2GB free RAM — the
-swapfile from step 1 covers this on smaller VPS plans. Update later with:
-`cd /opt/3x-ui && git pull && docker compose up -d --build`.
+swapfile from step 1 covers this on smaller VPS plans.
 
 ### 4) Telegram bots (your repos)
 Each bot ships its own production-grade `install.sh` (systemd service, isolated
@@ -261,7 +276,7 @@ print the last 30 lines on the spot without leaving the menu.
 | 8000            | Coolify             | Dashboard                                |
 | 6001, 6002      | Coolify             | Realtime/websocket connections           |
 | 2080            | 3x-ui panel         | Fixed — `http://<server-ip>:2080/webdw/` |
-| 2081-2090       | 3x-ui inbounds      | Reserved headroom, opened automatically  |
+| 2081-2090       | 3x-ui inbounds/SSL  | Headroom for inbounds + acme.sh cert challenges; published from Docker AND opened in UFW |
 | 8081            | tg-bot-uploader-drive | Local-only Telegram Bot API container, **not** exposed publicly |
 
 ## Resource priority
