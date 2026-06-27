@@ -172,23 +172,35 @@ enable_buildkit_cache() {
 }
 
 # update_self — git pull the toolkit itself from GitHub and re-exec.
+# Every exit path pauses on press_enter first: the menu loop's next redraw
+# does `clear`, which otherwise wipes whatever this just printed (success,
+# "already up to date", or an error) before you ever get to read it — that
+# looked exactly like "nothing happened" when option 12 was pressed.
 update_self() {
   header "Updating svsetup from GitHub"
   if [ ! -d "${SVSETUP_DIR}/.git" ]; then
-    warn "${SVSETUP_DIR} is not a git checkout — cannot self-update. Re-run the installer instead."
+    warn "${SVSETUP_DIR} is not a git checkout — cannot self-update. Re-run the installer instead:"
+    warn "curl -fsSL https://raw.githubusercontent.com/Alirewa/Ubuntu-Server-setup/main/install.sh -o svsetup-install.sh && sudo bash svsetup-install.sh"
+    press_enter
     return 1
   fi
-  git -C "$SVSETUP_DIR" fetch --all -q || { warn "git fetch failed — check your network"; return 1; }
+  if ! git -C "$SVSETUP_DIR" fetch --all -q; then
+    warn "git fetch failed — check this server's network/DNS and try again."
+    press_enter
+    return 1
+  fi
   local before after
-  before="$(git -C "$SVSETUP_DIR" rev-parse --short HEAD)"
+  before="$(git -C "$SVSETUP_DIR" rev-parse --short HEAD)" || before=""
   git -C "$SVSETUP_DIR" reset --hard origin/main -q
-  after="$(git -C "$SVSETUP_DIR" rev-parse --short HEAD)"
+  after="$(git -C "$SVSETUP_DIR" rev-parse --short HEAD)" || after=""
   chmod +x "${SVSETUP_DIR}/svsetup.sh" "${SVSETUP_DIR}"/modules/*.sh 2>/dev/null || true
   if [ "$before" = "$after" ]; then
-    ok "Already up to date (${after})"
+    ok "Already up to date (${after:-unknown})"
+    press_enter
     return 0
   fi
-  ok "Updated ${before} -> ${after}"
+  ok "Updated ${before:-?} -> ${after:-?}"
   info "Restarting svsetup with the new version..."
+  press_enter
   exec "${SVSETUP_DIR}/svsetup.sh"
 }
