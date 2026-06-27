@@ -28,6 +28,8 @@ source "${SVSETUP_DIR}/modules/09-speed.sh"
 source "${SVSETUP_DIR}/modules/10-reset.sh"
 # shellcheck source=modules/11-docker-manage.sh
 source "${SVSETUP_DIR}/modules/11-docker-manage.sh"
+# shellcheck source=modules/12-edit-files.sh
+source "${SVSETUP_DIR}/modules/12-edit-files.sh"
 
 run_initial_setup() {
   module_init
@@ -56,17 +58,18 @@ print_menu() {
   printf '%s\n' "${C_BOLD}${C_CYAN}==================================================${C_RESET}"
   printf '%s\n' "${C_BOLD}${C_CYAN}        SV-Setup — Ubuntu Server Control Panel     ${C_RESET}"
   printf '%s\n' "${C_BOLD}${C_CYAN}==================================================${C_RESET}"
-  echo "  1) Initial server setup       (update + security + Docker)"
-  echo "  2) Install / update Coolify   (deploy panel)"
-  echo "  3) Install / update 3x-ui     (Sanaei VPN panel)"
-  echo "  4) Telegram bots              (auto-sender / drive-uploader)"
-  echo "  5) Install extra useful packages"
-  echo "  6) Firewall management        (list / add / remove ports)"
-  echo "  7) Web/Network speed boost    (BBR, helps Coolify & 3x-ui load faster)"
-  echo "  8) Update svsetup itself      (pull latest from GitHub)"
-  echo "  9) Show installed components / docs"
-  echo " 10) Reset — undo everything svsetup installed"
-  echo " 11) Docker container management (list/start/stop/ports)"
+  echo "  1) Initial setup     — update, security, Docker"
+  echo "  2) Coolify           — deploy panel"
+  echo "  3) 3x-ui             — VPN panel"
+  echo "  4) Telegram bots"
+  echo "  5) Extra packages"
+  echo "  6) Firewall"
+  echo "  7) Speed boost"
+  echo "  8) Self-update"
+  echo "  9) Status"
+  echo " 10) Reset / uninstall"
+  echo " 11) Docker containers"
+  echo " 12) Edit config files"
   echo "  0) Exit"
   echo
 }
@@ -102,6 +105,7 @@ main_menu() {
       9) show_status ;;
       10) module_reset; press_enter ;;
       11) module_docker_manage ;;
+      12) module_edit_files ;;
       0) exit 0 ;;
       *) warn "Invalid choice" ;;
     esac
@@ -110,7 +114,7 @@ main_menu() {
 
 usage() {
   cat <<EOF
-Usage: svsetup [--init|--coolify|--xui|--bots|--extras|--firewall|--speed|--update|--reset|--docker|--all|--ssh-strict]
+Usage: svsetup [--init|--coolify|--xui|--bots|--extras|--firewall|--speed|--update|--reset|--docker|--edit|--all|--ssh-strict]
 No flags: opens the interactive menu.
 EOF
 }
@@ -129,6 +133,7 @@ case "${1:-}" in
   --update)     update_self ;;
   --reset)      module_reset ;;
   --docker)     module_docker_manage ;;
+  --edit)       module_edit_files ;;
   --ssh-strict) ssh_strict_profile ;;
   --all)        run_initial_setup; module_coolify; module_xui; module_extras ;;
   -h|--help)    usage ;;

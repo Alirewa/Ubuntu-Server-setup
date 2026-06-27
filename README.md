@@ -165,6 +165,14 @@ container (its image/volumes are kept), and a one-shot view of every host port
 Docker currently publishes — so you can see at a glance what's running and
 exactly which ports each container is using.
 
+### 12) Edit important files
+Lists the security-relevant config files svsetup manages (SSH hardening rules,
+main `sshd_config`, the Fail2ban jail, sysctl tuning, Docker's `daemon.json`,
+3x-ui's `docker-compose.yml`, open-file limits, crontab, `/etc/hosts`) and opens
+your pick in `$EDITOR` (or `nano`). Backs up before editing; SSH/JSON/Compose
+files are validated after saving and automatically rolled back if the edit would
+break them, instead of leaving you with a config that locks you out or won't start.
+
 ## Non-interactive flags
 
 ```bash
@@ -178,6 +186,7 @@ sudo svsetup --speed       # re-apply network speed tuning
 sudo svsetup --update      # pull latest svsetup from GitHub
 sudo svsetup --reset       # undo everything svsetup installed (interactive confirms)
 sudo svsetup --docker      # Docker container management menu
+sudo svsetup --edit        # edit important config files
 sudo svsetup --all         # everything in one go
 sudo svsetup --ssh-strict  # opt-in: custom SSH port + key-only auth
 ```
