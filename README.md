@@ -21,8 +21,11 @@ manually running the same fifteen commands every time.
   configuration, and Docker BuildKit caching to speed up page loads and deploys.
 - **Coolify installer** — official latest release, firewall ports opened
   automatically, configured to get resource priority over everything else.
-- **3x-ui (Sanaei) installer** — official latest release, with automatic firewall
-  rules and CPU/RAM limits so it never competes with Coolify for resources.
+- **3x-ui (Sanaei) installer** — built and run via Docker, following the official
+  `docker-compose.yml` from the 3x-ui repo itself, with fixed credentials/port/path
+  and CPU/RAM limits so it never competes with Coolify for resources.
+- **Docker container management menu** — see every container svsetup (or anything
+  else) started, its state and published ports, with start/stop/restart/logs/remove.
 - **Telegram bot deployment** — one-command install for
   [tg-bot-auto-sender](https://github.com/Alirewa/tg-bot-auto-sender) and
   [tg-bot-uploader-drive](https://github.com/Alirewa/tg-bot-uploader-drive).
@@ -73,14 +76,27 @@ server (written automatically) for the full explanation, including why a second 
 server (nginx/caddy) is deliberately *not* installed — Coolify already runs Traefik
 on 80/443 and a second proxy would only get in its way.
 
-### 3) 3x-ui (MHSanaei) — personal VPN panel
-Runs the project's **own official installer** (it asks you for the panel port and
-credentials interactively — exactly as it normally does). svsetup then:
-- Opens the port(s) you chose in UFW.
-- Caps the `x-ui.service` systemd unit to ~20% CPU / 512MB RAM with a lower
-  scheduling priority, so it can never compete with Coolify for resources (since
-  x-ui runs natively, not in Docker, the systemd cgroup equivalent of a Docker
-  resource limit is used — same underlying kernel mechanism).
+### 3) 3x-ui (MHSanaei) — personal VPN panel, via Docker
+svsetup clones the [3x-ui repo](https://github.com/MHSanaei/3x-ui) into
+`/opt/3x-ui` and builds/runs it with Docker using **the project's own official
+`docker-compose.yml` and `Dockerfile`** — no native/systemd install, fully
+isolated from the host. No prompts:
+
+- **Login:** `admin` / `admin` (the panel's own default — change it from inside
+  the panel after your first login).
+- **URL:** `http://<server-ip>:2080/webdw/`
+- **Firewall:** ports `2080-2090` (tcp+udp) are opened automatically — `2080` is
+  the panel, the rest is headroom for Xray inbounds you add later, with no
+  separate firewall prompt needed.
+- **Resources:** the container is capped at `cpus: 0.5`, `mem_limit: 512m` directly
+  in its `docker-compose.yml` — the same plain Docker resource-limit mechanism
+  Coolify's own containers just don't have applied to them, which is what keeps
+  Coolify the priority workload.
+
+The first install builds the panel from source inside Docker (Go + the Vite
+frontend), so it can take a few minutes and briefly needs ~1-2GB free RAM — the
+swapfile from step 1 covers this on smaller VPS plans. Update later with:
+`cd /opt/3x-ui && git pull && docker compose up -d --build`.
 
 ### 4) Telegram bots (your repos)
 Each bot ships its own production-grade `install.sh` (systemd service, isolated
@@ -116,10 +132,11 @@ Quick status view of which modules have run, plus pointers to the full on-server
 documentation (`/root/svsetup-README.txt`) and the log file.
 
 ### Bonus: per-install port prompts
-Before Coolify, 3x-ui, and each Telegram bot actually installs, svsetup asks if
-that specific install needs any extra firewall ports beyond what it already knows
+Before Coolify and each Telegram bot actually installs, svsetup asks if that
+specific install needs any extra firewall ports beyond what it already knows
 about — so the firewall stays in sync with whatever you're deploying, without
-having to remember to open ports manually afterward.
+having to remember to open ports manually afterward. (3x-ui is the one exception:
+its port range is fixed and opened automatically, with no prompt — see step 3.)
 
 ### 10) Reset — undo everything svsetup installed
 Walks through every component svsetup can install (Telegram bots, 3x-ui, Coolify,
@@ -141,6 +158,13 @@ sudo svsetup --reset
 then re-run the one-line installer (or `sudo svsetup --all`) to start fresh — no
 VPS/OS reinstall needed.
 
+### 11) Docker container management
+A `docker ps`-style table (name, state, published ports, image) for every
+container on the box, plus actions: start, stop, restart, tail logs, remove a
+container (its image/volumes are kept), and a one-shot view of every host port
+Docker currently publishes — so you can see at a glance what's running and
+exactly which ports each container is using.
+
 ## Non-interactive flags
 
 ```bash
@@ -153,6 +177,7 @@ sudo svsetup --firewall    # firewall management menu
 sudo svsetup --speed       # re-apply network speed tuning
 sudo svsetup --update      # pull latest svsetup from GitHub
 sudo svsetup --reset       # undo everything svsetup installed (interactive confirms)
+sudo svsetup --docker      # Docker container management menu
 sudo svsetup --all         # everything in one go
 sudo svsetup --ssh-strict  # opt-in: custom SSH port + key-only auth
 ```
@@ -197,17 +222,24 @@ subshell wrapping now contains.
 | 80, 443         | Coolify (Traefik)   | Public web traffic for deployed apps     |
 | 8000            | Coolify             | Dashboard                                |
 | 6001, 6002      | Coolify             | Realtime/websocket connections           |
-| (you choose)    | 3x-ui panel/inbounds| Opened interactively during install      |
+| 2080            | 3x-ui panel         | Fixed — `http://<server-ip>:2080/webdw/` |
+| 2081-2090       | 3x-ui inbounds      | Reserved headroom, opened automatically  |
 | 8081            | tg-bot-uploader-drive | Local-only Telegram Bot API container, **not** exposed publicly |
 
 ## Resource priority
 
-Coolify is the priority workload (~80% of server resources by design):
+Coolify is the priority workload (~80% of server resources by design), all
+enforced with plain Docker resource limits — no special scheduler needed:
 - Coolify's Docker containers: **no** cpu/mem limits applied.
-- x-ui: capped via systemd (`CPUQuota`, `MemoryMax`, `Nice`) — see
-  `/etc/systemd/system/x-ui.service.d/svsetup-limits.conf` to adjust.
+- 3x-ui's container: capped at `cpus: 0.5`, `mem_limit: 512m` directly in
+  `/opt/3x-ui/docker-compose.yml` — edit those values and run
+  `docker compose up -d` in that directory to adjust.
 - Telegram bots: lightweight services with no caps needed; if you notice them
-  using too many resources, they can be capped the same way via a systemd drop-in.
+  using too many resources, they can be capped the same way via a systemd drop-in
+  (auto-sender, drive-uploader) or a `cpus`/`mem_limit` entry (drive-uploader's
+  Docker-based Bot API container).
+- Use menu option 11 (Docker container management) any time to see what's
+  actually running and how its ports are mapped.
 
 ## On-server documentation
 

@@ -26,6 +26,8 @@ source "${SVSETUP_DIR}/modules/08-firewall.sh"
 source "${SVSETUP_DIR}/modules/09-speed.sh"
 # shellcheck source=modules/10-reset.sh
 source "${SVSETUP_DIR}/modules/10-reset.sh"
+# shellcheck source=modules/11-docker-manage.sh
+source "${SVSETUP_DIR}/modules/11-docker-manage.sh"
 
 run_initial_setup() {
   module_init
@@ -64,6 +66,7 @@ print_menu() {
   echo "  8) Update svsetup itself      (pull latest from GitHub)"
   echo "  9) Show installed components / docs"
   echo " 10) Reset — undo everything svsetup installed"
+  echo " 11) Docker container management (list/start/stop/ports)"
   echo "  0) Exit"
   echo
 }
@@ -98,6 +101,7 @@ main_menu() {
       8) update_self ;;
       9) show_status ;;
       10) module_reset; press_enter ;;
+      11) module_docker_manage ;;
       0) exit 0 ;;
       *) warn "Invalid choice" ;;
     esac
@@ -106,7 +110,7 @@ main_menu() {
 
 usage() {
   cat <<EOF
-Usage: svsetup [--init|--coolify|--xui|--bots|--extras|--firewall|--speed|--update|--reset|--all|--ssh-strict]
+Usage: svsetup [--init|--coolify|--xui|--bots|--extras|--firewall|--speed|--update|--reset|--docker|--all|--ssh-strict]
 No flags: opens the interactive menu.
 EOF
 }
@@ -124,6 +128,7 @@ case "${1:-}" in
   --speed)      module_speed ;;
   --update)     update_self ;;
   --reset)      module_reset ;;
+  --docker)     module_docker_manage ;;
   --ssh-strict) ssh_strict_profile ;;
   --all)        run_initial_setup; module_coolify; module_xui; module_extras ;;
   -h|--help)    usage ;;

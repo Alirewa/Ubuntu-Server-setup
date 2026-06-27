@@ -77,19 +77,35 @@ reset_bots() {
 
 reset_xui() {
   header "3x-ui"
-  if ! command -v x-ui >/dev/null 2>&1 && [ ! -d /usr/local/x-ui ]; then
-    info "3x-ui is not installed — nothing to do."
-    return 0
+  local found=0
+
+  # Current (Docker-based) install.
+  if [ -d /opt/3x-ui ] || docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q '^3xui_app$'; then
+    found=1
+    confirm "Remove the Docker-based 3x-ui (container + image + /opt/3x-ui, including its database)?" "N" && {
+      [ -f /opt/3x-ui/docker-compose.yml ] && ( cd /opt/3x-ui && docker compose down --rmi local --volumes >/dev/null 2>&1 || true )
+      docker rm -f 3xui_app >/dev/null 2>&1 || true
+      rm -rf /opt/3x-ui
+      ok "Docker-based 3x-ui removed"
+    }
   fi
-  confirm "Remove 3x-ui (panel, config, xray-core, its database)?" "N" || { warn "Skipped."; return 0; }
-  systemctl disable --now x-ui >/dev/null 2>&1 || true
-  rm -rf /usr/local/x-ui /etc/x-ui /var/log/x-ui
-  rm -f /etc/systemd/system/x-ui.service
-  rm -rf /etc/systemd/system/x-ui.service.d
-  rm -f /usr/bin/x-ui /usr/local/bin/x-ui
-  systemctl daemon-reload >/dev/null 2>&1 || true
+
+  # Legacy (pre-Docker, native systemd) install, in case this server still has one.
+  if command -v x-ui >/dev/null 2>&1 || [ -d /usr/local/x-ui ]; then
+    found=1
+    confirm "A legacy native (non-Docker) 3x-ui install was also found — remove it too?" "N" && {
+      systemctl disable --now x-ui >/dev/null 2>&1 || true
+      rm -rf /usr/local/x-ui /etc/x-ui /var/log/x-ui
+      rm -f /etc/systemd/system/x-ui.service
+      rm -rf /etc/systemd/system/x-ui.service.d
+      rm -f /usr/bin/x-ui /usr/local/bin/x-ui
+      systemctl daemon-reload >/dev/null 2>&1 || true
+      ok "Legacy native 3x-ui removed"
+    }
+  fi
+
   rm -f "${SVSETUP_STATE_DIR}/xui.done"
-  ok "3x-ui removed"
+  [ "$found" = 0 ] && info "3x-ui is not installed — nothing to do."
 }
 
 reset_coolify() {

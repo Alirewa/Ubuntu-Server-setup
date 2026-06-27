@@ -1,84 +1,128 @@
 #!/usr/bin/env bash
-# 05-xui.sh — 3x-ui (MHSanaei) latest install via the project's own interactive
-# installer, then firewall + resource capping so it never competes with Coolify.
+# 05-xui.sh — 3x-ui (MHSanaei) installed via Docker, following the official
+# docker-compose.yml shipped in the project's own repo. Fixed admin/admin
+# credentials, fixed port, fixed web path, fixed port range — no prompts.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=../lib/common.sh
 source "${SCRIPT_DIR}/lib/common.sh"
 
-COOLIFY_RESERVED_PORTS="22 80 443 8000 6001 6002"
+XUI_REPO_URL="https://github.com/MHSanaei/3x-ui.git"
+XUI_INSTALL_DIR="/opt/3x-ui"
+XUI_CONTAINER="3xui_app"
+XUI_PORT="${SVSETUP_XUI_PORT:-2080}"
+XUI_WEBPATH="${SVSETUP_XUI_WEBPATH:-webdw}"
+XUI_USERNAME="${SVSETUP_XUI_USERNAME:-admin}"
+XUI_PASSWORD="${SVSETUP_XUI_PASSWORD:-admin}"
+XUI_PORT_RANGE_START=2080
+XUI_PORT_RANGE_END=2090
+XUI_CPUS="${SVSETUP_XUI_CPUS:-0.5}"
+XUI_MEM="${SVSETUP_XUI_MEM:-512m}"
 
 module_xui() {
-  header "3x-ui (Sanaei panel)"
-  warn "The official installer will ask you to choose/confirm a panel port and"
-  warn "credentials. Avoid these Coolify-reserved ports: ${COOLIFY_RESERVED_PORTS}"
-  ask_open_ports "3x-ui (any inbound port you already know you'll need)"
-  press_enter
+  is_done "docker" || die "Docker is required first — run option 1, or module 03, first."
 
-  run_remote_installer "https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh"
-  ok "3x-ui install/update finished"
+  header "3x-ui (Sanaei panel) — Docker install"
+  info "Following the official Docker install method from the 3x-ui repo itself"
+  info "(docker-compose.yml + Dockerfile at the repo root, built locally)."
 
-  header "Firewall: open the ports x-ui is using"
-  open_xui_ports
+  fetch_xui_source
+  write_xui_compose
+  build_and_start_xui
+  enforce_xui_settings
 
-  header "Resource priority: capping x-ui so Coolify stays at ~80% of resources"
-  cap_xui_resources
+  header "Firewall: opening the 3x-ui port range"
+  ufw_allow "${XUI_PORT_RANGE_START}:${XUI_PORT_RANGE_END}/tcp" "3x-ui"
+  ufw_allow "${XUI_PORT_RANGE_START}:${XUI_PORT_RANGE_END}/udp" "3x-ui"
+  ok "Opened ${XUI_PORT_RANGE_START}-${XUI_PORT_RANGE_END} (tcp+udp) — panel + future inbounds"
 
-  append_info_doc <<'EOF'
+  append_info_doc <<EOF
 
-== [05] 3x-ui ==
-Manage from the shell at any time with: x-ui
-(menu lets you change port/credentials, view inbounds, restart, etc.)
+== [05] 3x-ui (Docker) ==
+Panel:    http://<server-ip>:${XUI_PORT}/${XUI_WEBPATH}/
+Login:    ${XUI_USERNAME} / ${XUI_PASSWORD}   <-- change this from inside the panel
+Source:   ${XUI_INSTALL_DIR} (cloned from MHSanaei/3x-ui, built into a local image)
+Container: ${XUI_CONTAINER}   |   Manage: docker compose -f ${XUI_INSTALL_DIR}/docker-compose.yml ...
+Ports opened: ${XUI_PORT_RANGE_START}-${XUI_PORT_RANGE_END} (tcp+udp) — covers the panel port
+and leaves headroom for Xray inbounds you add later in that same range, with no extra
+firewall prompts needed.
 
-Resource priority vs Coolify:
-  Coolify runs as plain Docker containers with NO resource limits, so the Docker
-  scheduler always gives it whatever CPU/RAM it asks for. x-ui, however, is installed
-  natively (not in a container) as the systemd service `x-ui.service`, so a Docker
-  cgroup limit cannot apply to it directly — the equivalent systemd mechanism
-  (CPUQuota + MemoryMax, the same cgroup v2 controls Docker itself uses under the
-  hood) was applied instead, capping x-ui at roughly 20% CPU / 512MB RAM and a lower
-  scheduling/IO priority (Nice=10). Net effect: Coolify gets effective priority for
-  the remaining ~80% of resources, matching what you asked for.
-  Adjust the cap any time: edit /etc/systemd/system/x-ui.service.d/svsetup-limits.conf
-  then run: systemctl daemon-reload && systemctl restart x-ui
+Resource priority vs Coolify: this container is capped at cpus=${XUI_CPUS},
+mem_limit=${XUI_MEM} directly in its docker-compose.yml (plain Docker resource
+limits, same mechanism Coolify's own containers use — they're just left uncapped).
+
+Update later: cd ${XUI_INSTALL_DIR} && git pull && docker compose up -d --build
 EOF
 
   mark_done "xui"
-  ok "3x-ui setup complete"
+  ok "3x-ui (Docker) setup complete — panel at http://<server-ip>:${XUI_PORT}/${XUI_WEBPATH}/"
 }
 
-open_xui_ports() {
-  local port
-  ask port "Panel port you just set in the x-ui installer (for the firewall rule)" ""
-  if [ -n "$port" ]; then
-    ufw_allow "${port}/tcp" "3x-ui panel"
-    ok "Opened panel port ${port}/tcp"
+fetch_xui_source() {
+  if [ -d "${XUI_INSTALL_DIR}/.git" ]; then
+    info "Updating existing 3x-ui source checkout..."
+    git -C "$XUI_INSTALL_DIR" fetch --all -q
+    git -C "$XUI_INSTALL_DIR" reset --hard origin/main -q
   else
-    warn "No port entered — open it manually later with: ufw allow <port>/tcp"
+    info "Cloning 3x-ui source (first build compiles Go + the frontend inside Docker —"
+    info "this can take several minutes and needs ~1-2GB free RAM during the build)..."
+    git clone -q "$XUI_REPO_URL" "$XUI_INSTALL_DIR"
   fi
-  if confirm "Will you add VPN inbounds on additional ports (besides the panel)?" "N"; then
-    local range
-    ask range "Port or range to open (e.g. 443 or 10000:10100)" ""
-    [ -n "$range" ] && ufw_allow "${range}/tcp" "3x-ui inbound" && ufw_allow "${range}/udp" "3x-ui inbound"
-  fi
+  mkdir -p "${XUI_INSTALL_DIR}/db" "${XUI_INSTALL_DIR}/cert"
 }
 
-cap_xui_resources() {
-  local cpu_pct mem_cap
-  cpu_pct="${SVSETUP_XUI_CPU_PCT:-20%}"
-  mem_cap="${SVSETUP_XUI_MEM:-512M}"
-  mkdir -p /etc/systemd/system/x-ui.service.d
-  cat > /etc/systemd/system/x-ui.service.d/svsetup-limits.conf <<EOF
-[Service]
-CPUQuota=${cpu_pct}
-MemoryMax=${mem_cap}
-Nice=10
-IOSchedulingClass=best-effort
-IOSchedulingPriority=7
+write_xui_compose() {
+  cat > "${XUI_INSTALL_DIR}/docker-compose.yml" <<EOF
+services:
+  3xui:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    container_name: ${XUI_CONTAINER}
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    volumes:
+      - ./db/:/etc/x-ui/
+      - ./cert/:/root/cert/
+    environment:
+      XRAY_VMESS_AEAD_FORCED: "false"
+      XUI_ENABLE_FAIL2BAN: "true"
+      XUI_PORT: "${XUI_PORT}"
+      XUI_INIT_WEB_BASE_PATH: "${XUI_WEBPATH}"
+    tty: true
+    ports:
+      - "${XUI_PORT}:${XUI_PORT}"
+    cpus: "${XUI_CPUS}"
+    mem_limit: "${XUI_MEM}"
+    restart: unless-stopped
 EOF
-  systemctl daemon-reload
-  systemctl restart x-ui >/dev/null 2>&1 || true
-  ok "x-ui capped at CPUQuota=${cpu_pct}, MemoryMax=${mem_cap}, low scheduling priority"
+}
+
+build_and_start_xui() {
+  info "Building and starting the 3x-ui container (docker compose up -d --build)..."
+  ( cd "$XUI_INSTALL_DIR" && docker compose up -d --build )
+  ok "3x-ui container is up"
+}
+
+# Locks in admin/admin, the fixed port, and the fixed web path via the panel's
+# own CLI — idempotent, so re-running install (e.g. after an update) always
+# converges back to these values instead of drifting from a previous run.
+enforce_xui_settings() {
+  local tries=0
+  until docker exec "$XUI_CONTAINER" /app/x-ui setting \
+      -username "$XUI_USERNAME" -password "$XUI_PASSWORD" \
+      -port "$XUI_PORT" -webBasePath "$XUI_WEBPATH" >/dev/null 2>&1; do
+    tries=$((tries + 1))
+    if [ "$tries" -ge 10 ]; then
+      warn "Could not confirm x-ui settings via CLI — the panel may still be starting."
+      warn "Defaults (admin/admin, port ${XUI_PORT}, /${XUI_WEBPATH}/) should already apply from first boot."
+      return 0
+    fi
+    sleep 2
+  done
+  docker restart "$XUI_CONTAINER" >/dev/null 2>&1 || true
+  ok "Credentials/port/web-path locked in: ${XUI_USERNAME}/${XUI_PASSWORD}, port ${XUI_PORT}, /${XUI_WEBPATH}/"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
