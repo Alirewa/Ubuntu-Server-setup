@@ -3,7 +3,11 @@
 # Re-run any time: `sudo svsetup`. Every module is idempotent/safe to repeat,
 # in any order — see lib/common.sh's ensure_docker() and is_done()/mark_done().
 set -euo pipefail
-SVSETUP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Resolve through the /usr/local/bin/svsetup symlink — BASH_SOURCE alone
+# would resolve to /usr/local/bin (the symlink's own directory) instead of
+# the real /opt/svsetup install, which is exactly why `svsetup` failed to
+# find lib/common.sh when run via the symlink.
+SVSETUP_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 # shellcheck source=lib/common.sh
 source "${SVSETUP_DIR}/lib/common.sh"
 
