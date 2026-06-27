@@ -35,7 +35,7 @@ module_init() {
   configure_swap
 
   header "Kernel & Network Performance Tuning"
-  configure_sysctl
+  apply_network_tuning
 
   header "File Descriptor & Journald Limits"
   configure_limits
@@ -75,27 +75,6 @@ configure_swap() {
   swapon /swapfile
   grep -q '/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
   ok "Swapfile (${swap_mb}MB) created and enabled"
-}
-
-configure_sysctl() {
-  local conf=/etc/sysctl.d/99-svsetup.conf
-  cat > "$conf" <<'EOF'
-# Managed by svsetup — performance & sane defaults for a Docker/Coolify host.
-vm.swappiness = 10
-vm.vfs_cache_pressure = 50
-vm.overcommit_memory = 1
-fs.file-max = 2097152
-net.core.somaxconn = 65535
-net.core.netdev_max_backlog = 16384
-net.ipv4.tcp_max_syn_backlog = 8192
-net.ipv4.tcp_fin_timeout = 15
-net.ipv4.tcp_fastopen = 3
-net.core.default_qdisc = fq
-net.ipv4.tcp_congestion_control = bbr
-EOF
-  modprobe tcp_bbr 2>/dev/null || true
-  sysctl --system >/dev/null 2>&1 || true
-  ok "sysctl tuning applied (BBR congestion control, larger backlogs, swappiness=10)"
 }
 
 configure_limits() {

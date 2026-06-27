@@ -29,6 +29,8 @@ module_bots() {
 
 install_autosender() {
   header "tg-bot-auto-sender"
+  info "This bot needs no public port by default (it only talks outbound to Telegram)."
+  ask_open_ports "tg-bot-auto-sender"
   info "Running the bot's own installer (Node.js runtime, systemd service, isolated dir /opt/tg-bot-auto-sender)..."
   run_remote_installer "$AUTOSENDER_URL"
   append_info_doc <<'EOF'
@@ -47,6 +49,8 @@ EOF
 
 install_drivebot() {
   header "tg-bot-uploader-drive"
+  info "By default this only needs port 8081 LOCALLY for its own Bot API container (not exposed publicly)."
+  ask_open_ports "tg-bot-uploader-drive"
   info "Running the bot's own installer (Python 3.12 venv, isolated systemd service, dedicated Docker container for the local Bot API)..."
   run_remote_installer "$DRIVEBOT_URL"
   append_info_doc <<'EOF'

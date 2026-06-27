@@ -69,6 +69,27 @@ Python venv / Node deps, unique service names) — svsetup just runs the officia
 compete with the panels above. Full explanation of each is written to
 `/root/svsetup-README.txt` on the server as it installs.
 
+### 6) Firewall management
+Dedicated UFW front-end: list current rules, allow a new port (tcp/udp/both, with a
+label), or remove a rule by number or by port — no need to remember `ufw` syntax.
+
+### 7) Web/Network speed boost
+Standalone button that (re-)applies the BBR/sysctl network tuning and the Docker
+BuildKit cache, independent of running the full initial setup, and prints what's
+currently active (congestion control algorithm, swap status, BuildKit cache
+presence). Safe to run any time.
+
+### 8) Update svsetup itself
+Pulls the latest version of this toolkit directly from GitHub (`git fetch` +
+`reset --hard origin/main` in `/opt/svsetup`) and restarts the menu on the new
+version — no need to re-run the curl one-liner.
+
+### Per-install port prompts
+Before Coolify, 3x-ui, and each Telegram bot actually installs, svsetup asks if
+that specific install needs any extra firewall ports beyond what it already knows
+about — so the firewall stays in sync with whatever you're deploying, without
+having to remember to open ports manually afterward.
+
 ## Non-interactive flags
 
 ```bash
@@ -77,9 +98,21 @@ sudo svsetup --coolify
 sudo svsetup --xui
 sudo svsetup --bots
 sudo svsetup --extras
+sudo svsetup --firewall    # firewall management menu
+sudo svsetup --speed       # re-apply network speed tuning
+sudo svsetup --update      # pull latest svsetup from GitHub
 sudo svsetup --all         # everything in one go
 sudo svsetup --ssh-strict  # opt-in: custom SSH port + key-only auth
 ```
+
+## Resilience
+
+Every menu option runs inside an isolated subshell — if a module hits an error
+(network blip, a package failing to install, etc.) you get an error message and
+land back on the menu instead of the whole `svsetup` session dying. An earlier
+version had a bug where SSH-port detection (`ss | grep ...`) could fail and silently
+kill the entire session under `set -e`, which is exactly the class of failure this
+subshell wrapping now contains.
 
 ## Firewall ports reference
 

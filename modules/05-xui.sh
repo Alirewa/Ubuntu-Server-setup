@@ -12,6 +12,7 @@ module_xui() {
   header "3x-ui (Sanaei panel)"
   warn "The official installer will ask you to choose/confirm a panel port and"
   warn "credentials. Avoid these Coolify-reserved ports: ${COOLIFY_RESERVED_PORTS}"
+  ask_open_ports "3x-ui (any inbound port you already know you'll need)"
   press_enter
 
   run_remote_installer "https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh"

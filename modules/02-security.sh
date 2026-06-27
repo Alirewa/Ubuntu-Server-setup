@@ -43,8 +43,7 @@ EOF
 setup_ufw() {
   pkg_install ufw
   local ssh_port
-  ssh_port="$(ss -tlnp 2>/dev/null | grep -oP 'sshd.*?:\K[0-9]+' | head -1)"
-  ssh_port="${ssh_port:-22}"
+  ssh_port="$(detect_ssh_port)"
   ufw default deny incoming >/dev/null
   ufw default allow outgoing >/dev/null
   ufw_allow "${ssh_port}/tcp" "SSH"

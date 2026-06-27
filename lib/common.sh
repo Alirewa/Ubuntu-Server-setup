@@ -97,3 +97,89 @@ append_info_doc() {
 press_enter() {
   read -r -p "Press Enter to continue..." _ </dev/tty || true
 }
+
+# detect_ssh_port — never fails (every fallible step is explicitly guarded),
+# safe to call under `set -euo pipefail`. Returns 22 if nothing else is found.
+detect_ssh_port() {
+  local p=""
+  p="$(sshd -T 2>/dev/null | awk 'tolower($1)=="port"{print $2; exit}')" || true
+  if [ -z "$p" ]; then
+    p="$(grep -iE '^[[:space:]]*Port[[:space:]]+[0-9]+' /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}' | head -1)" || true
+  fi
+  printf '%s' "${p:-22}"
+}
+
+# ask_open_ports CONTEXT_LABEL — generic pre-install prompt so any project,
+# known or not, can have its ports opened without svsetup hardcoding them.
+ask_open_ports() {
+  local context="$1" ports entry proto
+  ask ports "Any extra ports ${context} needs open on the firewall? (e.g. 9000 or 9000:9010, comma-separated, blank = none)" ""
+  [ -z "$ports" ] && return 0
+  local IFS=','
+  for entry in $ports; do
+    entry="$(echo "$entry" | xargs)"
+    [ -z "$entry" ] && continue
+    ask proto "Protocol for ${entry} (tcp/udp/both)" "tcp"
+    case "$proto" in
+      both) ufw_allow "${entry}/tcp" "$context"; ufw_allow "${entry}/udp" "$context" ;;
+      udp)  ufw_allow "${entry}/udp" "$context" ;;
+      *)    ufw_allow "${entry}/tcp" "$context" ;;
+    esac
+    ok "Opened ${entry} (${proto}) for ${context}"
+  done
+}
+
+# apply_network_tuning — BBR + sysctl/limits tuning shared by the initial
+# setup and the standalone "speed boost" module. Idempotent.
+apply_network_tuning() {
+  local conf=/etc/sysctl.d/99-svsetup.conf
+  cat > "$conf" <<'EOF'
+# Managed by svsetup — performance & sane defaults for a Docker/Coolify host.
+vm.swappiness = 10
+vm.vfs_cache_pressure = 50
+vm.overcommit_memory = 1
+fs.file-max = 2097152
+net.core.somaxconn = 65535
+net.core.netdev_max_backlog = 16384
+net.ipv4.tcp_max_syn_backlog = 8192
+net.ipv4.tcp_fin_timeout = 15
+net.ipv4.tcp_fastopen = 3
+net.core.default_qdisc = fq
+net.ipv4.tcp_congestion_control = bbr
+EOF
+  modprobe tcp_bbr 2>/dev/null || true
+  sysctl --system >/dev/null 2>&1 || true
+  ok "sysctl tuning applied (BBR congestion control, larger backlogs, swappiness=10)"
+}
+
+# enable_buildkit_cache — shared by Coolify install and the speed module.
+enable_buildkit_cache() {
+  command -v docker >/dev/null 2>&1 || return 0
+  docker volume create svsetup_buildkit_cache >/dev/null 2>&1 || true
+  if ! grep -q DOCKER_BUILDKIT /etc/environment 2>/dev/null; then
+    echo 'DOCKER_BUILDKIT=1' >> /etc/environment
+  fi
+  ok "BuildKit cache volume ensured (svsetup_buildkit_cache); DOCKER_BUILDKIT=1 set globally"
+}
+
+# update_self — git pull the toolkit itself from GitHub and re-exec.
+update_self() {
+  header "Updating svsetup from GitHub"
+  if [ ! -d "${SVSETUP_DIR}/.git" ]; then
+    warn "${SVSETUP_DIR} is not a git checkout — cannot self-update. Re-run the installer instead."
+    return 1
+  fi
+  git -C "$SVSETUP_DIR" fetch --all -q || { warn "git fetch failed — check your network"; return 1; }
+  local before after
+  before="$(git -C "$SVSETUP_DIR" rev-parse --short HEAD)"
+  git -C "$SVSETUP_DIR" reset --hard origin/main -q
+  after="$(git -C "$SVSETUP_DIR" rev-parse --short HEAD)"
+  chmod +x "${SVSETUP_DIR}/svsetup.sh" "${SVSETUP_DIR}"/modules/*.sh 2>/dev/null || true
+  if [ "$before" = "$after" ]; then
+    ok "Already up to date (${after})"
+    return 0
+  fi
+  ok "Updated ${before} -> ${after}"
+  info "Restarting svsetup with the new version..."
+  exec "${SVSETUP_DIR}/svsetup.sh"
+}

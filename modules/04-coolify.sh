@@ -18,15 +18,17 @@ module_coolify() {
   else
     info "Installing Coolify (official installer, always pulls latest release)..."
   fi
+
+  header "Firewall: ports needed before install"
+  for p in "${COOLIFY_PORTS[@]}"; do ufw_allow "${p}/tcp" "Coolify"; done
+  ok "Opened: ${COOLIFY_PORTS[*]}"
+  ask_open_ports "Coolify (e.g. a custom port for one of your deployed apps)"
+
   run_remote_installer "https://cdn.coollabs.io/coolify/install.sh"
   ok "Coolify install/update finished"
 
-  header "Firewall: opening Coolify ports"
-  for p in "${COOLIFY_PORTS[@]}"; do ufw_allow "${p}/tcp" "Coolify"; done
-  ok "Opened: ${COOLIFY_PORTS[*]}"
-
   header "Performance helpers for faster deployed sites"
-  performance_tweaks
+  enable_buildkit_cache
 
   append_info_doc <<'EOF'
 
@@ -57,15 +59,6 @@ EOF
 
   mark_done "coolify"
   ok "Coolify setup complete"
-}
-
-performance_tweaks() {
-  # Persistent BuildKit cache so repeat deploys reuse layers instead of rebuilding.
-  docker volume create svsetup_buildkit_cache >/dev/null 2>&1 || true
-  if ! grep -q DOCKER_BUILDKIT /etc/environment 2>/dev/null; then
-    echo 'DOCKER_BUILDKIT=1' >> /etc/environment
-  fi
-  ok "BuildKit cache volume ensured (svsetup_buildkit_cache); DOCKER_BUILDKIT=1 set globally"
 }
 
 require_module() {

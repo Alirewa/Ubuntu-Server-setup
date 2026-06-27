@@ -20,6 +20,10 @@ source "${SVSETUP_DIR}/modules/05-xui.sh"
 source "${SVSETUP_DIR}/modules/06-bots.sh"
 # shellcheck source=modules/07-extras.sh
 source "${SVSETUP_DIR}/modules/07-extras.sh"
+# shellcheck source=modules/08-firewall.sh
+source "${SVSETUP_DIR}/modules/08-firewall.sh"
+# shellcheck source=modules/09-speed.sh
+source "${SVSETUP_DIR}/modules/09-speed.sh"
 
 run_initial_setup() {
   module_init
@@ -27,9 +31,14 @@ run_initial_setup() {
   module_docker
 }
 
+coolify_with_deps() {
+  is_done "docker" || module_docker
+  module_coolify
+}
+
 show_status() {
   header "Installed Components"
-  for s in init security docker coolify xui bots extras; do
+  for s in init security docker coolify xui bots extras speed; do
     if is_done "$s"; then ok "$s"; else warn "$s — not installed yet"; fi
   done
   echo
@@ -43,14 +52,31 @@ print_menu() {
   printf '%s\n' "${C_BOLD}${C_CYAN}==================================================${C_RESET}"
   printf '%s\n' "${C_BOLD}${C_CYAN}        SV-Setup — Ubuntu Server Control Panel     ${C_RESET}"
   printf '%s\n' "${C_BOLD}${C_CYAN}==================================================${C_RESET}"
-  echo "  1) Initial server setup   (update + security + Docker)"
-  echo "  2) Install / update Coolify          (deploy panel)"
-  echo "  3) Install / update 3x-ui             (Sanaei VPN panel)"
-  echo "  4) Telegram bots                      (auto-sender / drive-uploader)"
+  echo "  1) Initial server setup       (update + security + Docker)"
+  echo "  2) Install / update Coolify   (deploy panel)"
+  echo "  3) Install / update 3x-ui     (Sanaei VPN panel)"
+  echo "  4) Telegram bots              (auto-sender / drive-uploader)"
   echo "  5) Install extra useful packages"
-  echo "  6) Show installed components / docs"
+  echo "  6) Firewall management        (list / add / remove ports)"
+  echo "  7) Web/Network speed boost    (BBR, helps Coolify & 3x-ui load faster)"
+  echo "  8) Update svsetup itself      (pull latest from GitHub)"
+  echo "  9) Show installed components / docs"
   echo "  0) Exit"
   echo
+}
+
+# run_step LABEL FUNC [ARGS...] — runs a module in a subshell so a failure
+# (set -e / die() inside the module) can never kill the whole svsetup session;
+# it just reports the error and returns you to the menu.
+run_step() {
+  local label="$1"; shift
+  if ( "$@" ); then
+    :
+  else
+    local rc=$?
+    err "${label} failed (exit ${rc}). See ${SVSETUP_LOG_FILE} for details."
+  fi
+  press_enter
 }
 
 main_menu() {
@@ -59,14 +85,15 @@ main_menu() {
     local choice
     ask choice "Choose an option" "0"
     case "$choice" in
-      1) run_initial_setup; press_enter ;;
-      2) require_root; require_ubuntu
-         is_done "docker" || module_docker
-         module_coolify; press_enter ;;
-      3) module_xui; press_enter ;;
-      4) module_bots; press_enter ;;
-      5) module_extras; press_enter ;;
-      6) show_status ;;
+      1) run_step "Initial server setup" run_initial_setup ;;
+      2) run_step "Coolify setup" coolify_with_deps ;;
+      3) run_step "3x-ui setup" module_xui ;;
+      4) run_step "Telegram bots" module_bots ;;
+      5) run_step "Extra packages" module_extras ;;
+      6) module_firewall ;;
+      7) run_step "Speed boost" module_speed ;;
+      8) update_self ;;
+      9) show_status ;;
       0) exit 0 ;;
       *) warn "Invalid choice" ;;
     esac
@@ -75,7 +102,7 @@ main_menu() {
 
 usage() {
   cat <<EOF
-Usage: svsetup [--init|--coolify|--xui|--bots|--extras|--all|--ssh-strict]
+Usage: svsetup [--init|--coolify|--xui|--bots|--extras|--firewall|--speed|--update|--all|--ssh-strict]
 No flags: opens the interactive menu.
 EOF
 }
@@ -89,6 +116,9 @@ case "${1:-}" in
   --xui)        module_xui ;;
   --bots)       module_bots ;;
   --extras)     module_extras ;;
+  --firewall)   module_firewall ;;
+  --speed)      module_speed ;;
+  --update)     update_self ;;
   --ssh-strict) ssh_strict_profile ;;
   --all)        run_initial_setup; module_coolify; module_xui; module_extras ;;
   -h|--help)    usage ;;
