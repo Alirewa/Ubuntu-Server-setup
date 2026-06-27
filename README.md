@@ -33,9 +33,12 @@ manually running the same fifteen commands every time.
   [tg-bot-uploader-drive](https://github.com/Alirewa/tg-bot-uploader-drive).
 - **Firewall management menu** — list, add, or remove UFW rules without memorizing
   `ufw` syntax.
+- **Domain registry** — track which domains point at Coolify vs 3x-ui, catch the
+  conflict before it happens, and verify DNS before requesting a certificate.
 - **Self-update** — pulls the latest version of this toolkit straight from GitHub.
-- **Full reset/uninstall** — undo everything svsetup installed without ever needing
-  to reinstall the server's OS.
+- **One-question reset/uninstall** — a single confirmation wipes everything
+  svsetup installed and returns the server to its pre-svsetup state, without
+  ever needing to reinstall the OS.
 
 ## Install
 
@@ -68,8 +71,11 @@ to the latest release).
 
 ### 2) Coolify — your deploy panel
 Installed via Coolify's own official installer (always the latest release). Opens
-ports `80, 443, 8000, 6001, 6002`. Coolify's containers are left **uncapped** —
-it gets resource priority over everything else installed by this toolkit.
+ports `80, 443, 8000, 6001, 6002`, plus `3000-3020` reserved for apps you deploy
+that need a port of their own (a custom backend service, etc.) — no extra firewall
+step needed when one of your deployments needs a port in that range. Coolify's
+containers are left **uncapped** — it gets resource priority over everything else
+installed by this toolkit.
 
 Also covers the "deploys feel slow" problem: BuildKit + a persistent build-cache
 volume are enabled so repeat deploys reuse cached layers, and the BBR/network tuning
@@ -113,7 +119,31 @@ The first install builds the panel from source inside Docker (Go + the Vite
 frontend), so it can take a few minutes and briefly needs ~1-2GB free RAM — the
 swapfile from step 1 covers this on smaller VPS plans.
 
-### 4) Telegram bots (your repos)
+### 4) Domains — a single place to track what's pointed where
+Coolify and 3x-ui each terminate TLS independently (Coolify via its built-in
+Traefik, 3x-ui via the acme.sh console from step 3) — svsetup doesn't replace
+either, but a domain pointed at the wrong one, or registered for both by
+accident, just fails silently with no obvious reason why. This is a small
+registry to stop that before it happens:
+
+- **Add a domain** — pick its target (Coolify or 3x-ui), and svsetup checks DNS
+  right away (does it actually resolve to this server's public IP yet?) before
+  you go request a certificate that's doomed to fail. If the domain is already
+  registered for the *other* service, it warns you loudly instead of letting
+  you silently double-book it.
+- **List domains** — every registered domain, its target, and a live DNS
+  status check (OK / not resolving / pointing elsewhere).
+- **Remove a domain** — drops it from the registry (does not touch Coolify's
+  config or any issued certificate — this is bookkeeping, not a proxy).
+- Registering a domain for **Coolify** just reminds you to add it inside
+  Coolify's own dashboard (App → Domains) — that's where Coolify actually
+  provisions the cert, svsetup only tracks it here to catch conflicts.
+- Registering a domain for **3x-ui** can jump straight into the certificate
+  console from here (same one as step 3 / the host `x-ui` command) so adding
+  the domain and requesting the cert is one continuous flow instead of two
+  separate things to remember.
+
+### 5) Telegram bots (your repos)
 Each bot ships its own production-grade `install.sh` (systemd service, isolated
 Python venv / Node deps, unique service names) — svsetup just runs the official one:
 - **[tg-bot-auto-sender](https://github.com/Alirewa/tg-bot-auto-sender)** — scrapes
@@ -121,30 +151,30 @@ Python venv / Node deps, unique service names) — svsetup just runs the officia
 - **[tg-bot-uploader-drive](https://github.com/Alirewa/tg-bot-uploader-drive)** —
   lets Telegram users upload files straight to their own Google Drive.
 
-### 5) Extra useful packages
+### 6) Extra useful packages
 `htop`, `glances`, `ncdu`, `tmux`, `fzf`, `bat`, `tree`, `jq`, `net-tools`, `dnsutils`,
 `rsync`, `zstd` — day-to-day server tools, none of which open a network port or
 compete with the panels above. Full explanation of each is written to
 `/root/svsetup-README.txt` on the server as it installs.
 
-### 6) Firewall management
+### 7) Firewall management
 Dedicated UFW front-end: list current rules, allow a new port (tcp/udp/both, with a
 label), or remove a rule by number or by port — no need to remember `ufw` syntax.
 
-### 7) Web/Network speed boost
+### 8) Web/Network speed boost
 Standalone button that (re-)applies the BBR/sysctl network tuning and the Docker
 BuildKit cache, independent of running the full initial setup, and prints what's
 currently active (congestion control algorithm, swap status, BuildKit cache
 presence). Safe to run any time.
 
-### 8) Docker container management
+### 9) Docker container management
 A `docker ps`-style table (name, state, published ports, image) for every
 container on the box, plus actions: start, stop, restart, tail logs, remove a
 container (its image/volumes are kept), and a one-shot view of every host port
 Docker currently publishes — so you can see at a glance what's running and
 exactly which ports each container is using.
 
-### 9) Edit important files
+### 10) Edit important files
 Lists the security-relevant config files svsetup manages (SSH hardening rules,
 main `sshd_config`, the Fail2ban jail, sysctl tuning, Docker's `daemon.json`,
 3x-ui's `docker-compose.yml`, open-file limits, crontab, `/etc/hosts`) and opens
@@ -152,12 +182,12 @@ your pick in `$EDITOR` (or `nano`). Backs up before editing; SSH/JSON/Compose
 files are validated after saving and automatically rolled back if the edit would
 break them, instead of leaving you with a config that locks you out or won't start.
 
-### 10) Status / logs
+### 11) Status / logs
 Quick status view of which modules have run, plus pointers to the full on-server
 documentation (`/root/svsetup-README.txt`) and an option to print the last 30
 lines of the log right there — the fastest way to check what just happened.
 
-### 11) Self-update
+### 12) Self-update
 Pulls the latest version of this toolkit directly from GitHub (`git fetch` +
 `reset --hard origin/main` in `/opt/svsetup`) and restarts the menu on the new
 version — no need to re-run the curl one-liner.
@@ -169,40 +199,40 @@ about — so the firewall stays in sync with whatever you're deploying, without
 having to remember to open ports manually afterward. (3x-ui is the one exception:
 its port range is fixed and opened automatically, with no prompt — see step 3.)
 
-### 12) Reset — undo everything svsetup installed
-Walks through every component svsetup can install (Telegram bots, 3x-ui, Coolify,
-Docker, firewall/SSH hardening, sysctl/swap tuning, extra packages) and offers to
-remove each one, with its own confirmation — destructive steps (Coolify's data,
-purging Docker) need an explicit yes. Requires typing `RESET` once up front. This
-(and Exit) are deliberately last in the menu since they're the options you'll use
-least often.
+### 13) Reset — undo everything svsetup installed
+**One question, then it just runs.** No per-component prompts, no "are you sure"
+chains — you get a single clear warning of everything that's about to be wiped,
+confirm once, and it tears down Coolify (and every app/database/backup it
+manages), 3x-ui, Telegram bots, Docker, firewall rules, SSH/security hardening,
+performance tuning, extra packages, the domain registry, and finally svsetup
+itself — the server ends up as if svsetup had never been run. This (and Exit)
+are deliberately last in the menu since they're the options you'll use least.
 
-**You never need to reinstall or reset the underlying server (the OS) to undo this
-toolkit.** Everything it does — installing packages, opening firewall ports, writing
+**You never need to reinstall or reset the underlying server (the OS) for this.**
+Everything svsetup did — installing packages, opening firewall ports, writing
 systemd services, running Docker containers — was done with standard Ubuntu tools
-(`apt`, `ufw`, `systemctl`, `docker`), and all of it can be undone the same way. If
-you've been experimenting and want a clean slate, just run:
+(`apt`, `ufw`, `systemctl`, `docker`), and all of it is undone the same way:
 
 ```bash
 sudo svsetup --reset
-# or, from the menu: option 12
+# or, from the menu: option 13
 ```
 
-then re-run the one-line installer (or `sudo svsetup --all`) to start fresh — no
-VPS/OS reinstall needed.
+then re-run the one-line installer to start fresh — no VPS/OS reinstall needed.
 
 ## Non-interactive flags
 
 ```bash
 sudo svsetup --init        # update + security + Docker only
 sudo svsetup --coolify
-sudo svsetup --xui
+sudo svsetup --xui         # install/update only — use the menu for the full submenu
+sudo svsetup --domains     # domain registry menu
 sudo svsetup --bots
 sudo svsetup --extras
 sudo svsetup --firewall    # firewall management menu
 sudo svsetup --speed       # re-apply network speed tuning
 sudo svsetup --update      # pull latest svsetup from GitHub
-sudo svsetup --reset       # undo everything svsetup installed (interactive confirms)
+sudo svsetup --reset       # wipe everything svsetup installed (single confirmation)
 sudo svsetup --docker      # Docker container management menu
 sudo svsetup --edit        # edit important config files
 sudo svsetup --all         # everything in one go
@@ -264,7 +294,7 @@ subshell wrapping now contains.
 
 Every run also writes a **full transcript** — not just curated status lines, but
 the raw output of every command — to `/var/log/svsetup/svsetup.log`. If something
-fails, that log has the real error message; menu option 10 (Status / logs) can
+fails, that log has the real error message; menu option 11 (Status / logs) can
 print the last 30 lines on the spot without leaving the menu.
 
 ## Firewall ports reference
@@ -275,6 +305,7 @@ print the last 30 lines on the spot without leaving the menu.
 | 80, 443         | Coolify (Traefik)   | Public web traffic for deployed apps     |
 | 8000            | Coolify             | Dashboard                                |
 | 6001, 6002      | Coolify             | Realtime/websocket connections           |
+| 3000-3020       | Coolify apps        | Reserved for deployed apps that need their own port |
 | 2080            | 3x-ui panel         | Fixed — `http://<server-ip>:2080/webdw/` |
 | 2081-2090       | 3x-ui inbounds/SSL  | Headroom for inbounds + acme.sh cert challenges; published from Docker AND opened in UFW |
 | 8081            | tg-bot-uploader-drive | Local-only Telegram Bot API container, **not** exposed publicly |
@@ -291,7 +322,7 @@ enforced with plain Docker resource limits — no special scheduler needed:
   using too many resources, they can be capped the same way via a systemd drop-in
   (auto-sender, drive-uploader) or a `cpus`/`mem_limit` entry (drive-uploader's
   Docker-based Bot API container).
-- Use menu option 8 (Docker container management) any time to see what's
+- Use menu option 9 (Docker container management) any time to see what's
   actually running and how its ports are mapped.
 
 ## On-server documentation

@@ -51,6 +51,8 @@ source "${SVSETUP_DIR}/modules/10-reset.sh"
 source "${SVSETUP_DIR}/modules/11-docker-manage.sh"
 # shellcheck source=modules/12-edit-files.sh
 source "${SVSETUP_DIR}/modules/12-edit-files.sh"
+# shellcheck source=modules/13-domains.sh
+source "${SVSETUP_DIR}/modules/13-domains.sh"
 
 run_initial_setup() {
   module_init
@@ -86,15 +88,16 @@ print_menu() {
   echo "  1) Initial setup     — update, security, Docker"
   echo "  2) Coolify           — deploy panel"
   echo "  3) 3x-ui             — VPN panel"
-  echo "  4) Telegram bots"
-  echo "  5) Extra packages"
-  echo "  6) Firewall"
-  echo "  7) Speed boost"
-  echo "  8) Docker containers"
-  echo "  9) Edit config files"
-  echo " 10) Status / logs"
-  echo " 11) Self-update"
-  echo " 12) Reset / uninstall"
+  echo "  4) Domains           — track/avoid conflicts, DNS check"
+  echo "  5) Telegram bots"
+  echo "  6) Extra packages"
+  echo "  7) Firewall"
+  echo "  8) Speed boost"
+  echo "  9) Docker containers"
+  echo " 10) Edit config files"
+  echo " 11) Status / logs"
+  echo " 12) Self-update"
+  echo " 13) Reset / uninstall"
   echo "  0) Exit"
   echo
 }
@@ -122,15 +125,16 @@ main_menu() {
       1) run_step "Initial server setup" run_initial_setup ;;
       2) run_step "Coolify setup" coolify_with_deps ;;
       3) module_xui ;;
-      4) run_step "Telegram bots" module_bots ;;
-      5) run_step "Extra packages" module_extras ;;
-      6) module_firewall ;;
-      7) run_step "Speed boost" module_speed ;;
-      8) module_docker_manage ;;
-      9) module_edit_files ;;
-      10) show_status ;;
-      11) update_self ;;
-      12) module_reset; press_enter ;;
+      4) module_domains ;;
+      5) run_step "Telegram bots" module_bots ;;
+      6) run_step "Extra packages" module_extras ;;
+      7) module_firewall ;;
+      8) run_step "Speed boost" module_speed ;;
+      9) module_docker_manage ;;
+      10) module_edit_files ;;
+      11) show_status ;;
+      12) update_self ;;
+      13) module_reset; press_enter ;;
       0) exit 0 ;;
       *) warn "Invalid choice" ;;
     esac
@@ -139,7 +143,7 @@ main_menu() {
 
 usage() {
   cat <<EOF
-Usage: svsetup [--init|--coolify|--xui|--bots|--extras|--firewall|--speed|--docker|--edit|--update|--reset|--all|--ssh-strict]
+Usage: svsetup [--init|--coolify|--xui|--domains|--bots|--extras|--firewall|--speed|--docker|--edit|--update|--reset|--all|--ssh-strict]
 No flags: opens the interactive menu.
 EOF
 }
@@ -151,6 +155,7 @@ case "${1:-}" in
   --init)       run_initial_setup ;;
   --coolify)    coolify_with_deps ;;
   --xui)        xui_install_or_update ;;
+  --domains)    module_domains ;;
   --bots)       module_bots ;;
   --extras)     module_extras ;;
   --firewall)   module_firewall ;;

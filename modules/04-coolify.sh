@@ -8,6 +8,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "${SCRIPT_DIR}/lib/common.sh"
 
 COOLIFY_PORTS=(22 80 443 8000 6001 6002)
+COOLIFY_APP_PORT_RANGE_START=3000
+COOLIFY_APP_PORT_RANGE_END=3020
 
 module_coolify() {
   ensure_docker
@@ -21,7 +23,8 @@ module_coolify() {
 
   header "Firewall: ports needed before install"
   for p in "${COOLIFY_PORTS[@]}"; do ufw_allow "${p}/tcp" "Coolify"; done
-  ok "Opened: ${COOLIFY_PORTS[*]}"
+  ufw_allow "${COOLIFY_APP_PORT_RANGE_START}:${COOLIFY_APP_PORT_RANGE_END}/tcp" "Coolify apps"
+  ok "Opened: ${COOLIFY_PORTS[*]}, and ${COOLIFY_APP_PORT_RANGE_START}-${COOLIFY_APP_PORT_RANGE_END} for app ports"
   ask_open_ports "Coolify (e.g. a custom port for one of your deployed apps)"
 
   run_remote_installer "https://cdn.coollabs.io/coolify/install.sh"
@@ -34,7 +37,9 @@ module_coolify() {
 
 == [04] Coolify ==
 Dashboard: http://<server-ip>:8000  (set up your admin account on first visit)
-Ports opened: 80 (HTTP), 443 (HTTPS), 8000 (dashboard), 6001/6002 (realtime websockets).
+Ports opened: 80 (HTTP), 443 (HTTPS), 8000 (dashboard), 6001/6002 (realtime websockets),
+and 3000-3020 reserved for apps you deploy that need a port of their own
+(e.g. a custom backend service) — no extra firewall step needed for those.
 
 Why deployed sites can feel slow right after a deploy, and what was done about it:
   1. Cold start: a fresh deploy rebuilds the container image and starts a brand-new
