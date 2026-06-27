@@ -90,6 +90,26 @@ that specific install needs any extra firewall ports beyond what it already know
 about — so the firewall stays in sync with whatever you're deploying, without
 having to remember to open ports manually afterward.
 
+### 10) Reset — undo everything svsetup installed
+Walks through every component svsetup can install (Telegram bots, 3x-ui, Coolify,
+Docker, firewall/SSH hardening, sysctl/swap tuning, extra packages) and offers to
+remove each one, with its own confirmation — destructive steps (Coolify's data,
+purging Docker) need an explicit yes. Requires typing `RESET` once up front.
+
+**You never need to reinstall or reset the underlying server (the OS) to undo this
+toolkit.** Everything it does — installing packages, opening firewall ports, writing
+systemd services, running Docker containers — was done with standard Ubuntu tools
+(`apt`, `ufw`, `systemctl`, `docker`), and all of it can be undone the same way. If
+you've been experimenting and want a clean slate, just run:
+
+```bash
+sudo svsetup --reset
+# or, from the menu: option 10
+```
+
+then re-run the one-line installer (or `sudo svsetup --all`) to start fresh — no
+VPS/OS reinstall needed.
+
 ## Non-interactive flags
 
 ```bash
@@ -101,6 +121,7 @@ sudo svsetup --extras
 sudo svsetup --firewall    # firewall management menu
 sudo svsetup --speed       # re-apply network speed tuning
 sudo svsetup --update      # pull latest svsetup from GitHub
+sudo svsetup --reset       # undo everything svsetup installed (interactive confirms)
 sudo svsetup --all         # everything in one go
 sudo svsetup --ssh-strict  # opt-in: custom SSH port + key-only auth
 ```
