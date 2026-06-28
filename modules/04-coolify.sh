@@ -7,6 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=../lib/common.sh
 source "${SCRIPT_DIR}/lib/common.sh"
 
+COOLIFY_INSTALLER_URL="https://raw.githubusercontent.com/Alirewa/coolify-Persian-optimize-/v4.x/scripts/install.sh"
 COOLIFY_PORTS=(22 80 443 8000 6001 6002)
 COOLIFY_APP_PORT_RANGE_START=3000
 COOLIFY_APP_PORT_RANGE_END=3020
@@ -16,9 +17,9 @@ module_coolify() {
 
   header "Coolify"
   if command -v coolify >/dev/null 2>&1 || [ -d /data/coolify ]; then
-    ok "Coolify already installed, re-running official installer to update to latest"
+    ok "Coolify already installed, re-running the installer to update to latest"
   else
-    info "Installing Coolify (official installer, always pulls latest release)..."
+    info "Installing Coolify from your fork's installer (always pulls its latest commit)..."
   fi
 
   header "Firewall: ports needed before install"
@@ -27,7 +28,7 @@ module_coolify() {
   ok "Opened: ${COOLIFY_PORTS[*]}, and ${COOLIFY_APP_PORT_RANGE_START}-${COOLIFY_APP_PORT_RANGE_END} for app ports"
   ask_open_ports "Coolify (e.g. a custom port for one of your deployed apps)"
 
-  run_remote_installer "https://cdn.coollabs.io/coolify/install.sh"
+  run_remote_installer "$COOLIFY_INSTALLER_URL"
   ok "Coolify install/update finished"
 
   header "Performance helpers for faster deployed sites"
@@ -36,6 +37,7 @@ module_coolify() {
   append_info_doc <<'EOF'
 
 == [04] Coolify ==
+Installed from: Alirewa/coolify-Persian-optimize- (v4.x branch), not upstream coollabs.
 Dashboard: http://<server-ip>:8000  (set up your admin account on first visit)
 Ports opened: 80 (HTTP), 443 (HTTPS), 8000 (dashboard), 6001/6002 (realtime websockets),
 and 3000-3020 reserved for apps you deploy that need a port of their own

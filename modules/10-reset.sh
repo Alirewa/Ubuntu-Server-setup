@@ -102,13 +102,25 @@ reset_coolify() {
       --env-file /data/coolify/source/.env \
       -p coolify down --volumes --remove-orphans >/dev/null 2>&1 || true
   fi
-  docker rm -f coolify >/dev/null 2>&1 || true
+  # Fallback in case the compose teardown above couldn't run (e.g. a missing
+  # .env): catch any remaining container/volume/network Coolify created by name.
+  local leftovers; leftovers="$(docker ps -aq --filter 'name=coolify' 2>/dev/null)" || true
+  [ -n "$leftovers" ] && docker rm -f $leftovers >/dev/null 2>&1 || true
   docker volume rm coolify-db >/dev/null 2>&1 || true
+  docker network rm coolify >/dev/null 2>&1 || true
   rm -rf /data/coolify
+
+  # The installer adds its own deploy key to authorized_keys, tagged with a
+  # trailing "coolify" comment (it removes old entries the same way before
+  # re-adding one — see its own `sed -i "/coolify/d"` step), so this is the
+  # exact, installer-defined way to identify and remove just that one line.
+  for home in /root /home/*; do
+    [ -f "${home}/.ssh/authorized_keys" ] || continue
+    sed -i '/coolify$/d' "${home}/.ssh/authorized_keys"
+  done
+
   rm -f "${SVSETUP_STATE_DIR}/coolify.done"
-  ok "Coolify and all its data removed"
-  warn "Coolify also added an SSH key to ~/.ssh/authorized_keys (used for its local docker"
-  warn "context) — that's left in place; remove it by hand if you want it fully clean."
+  ok "Coolify, all its data, and its SSH deploy key have been removed"
 }
 
 reset_docker() {

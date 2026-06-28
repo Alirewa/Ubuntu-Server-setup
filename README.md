@@ -70,8 +70,10 @@ to the latest release).
   its own isolated container or systemd service.
 
 ### 2) Coolify — your deploy panel
-Installed via Coolify's own official installer (always the latest release). Opens
-ports `80, 443, 8000, 6001, 6002`, plus `3000-3020` reserved for apps you deploy
+Installed from [Alirewa/coolify-Persian-optimize-](https://github.com/Alirewa/coolify-Persian-optimize-)
+(the `v4.x` branch's `scripts/install.sh`) — a fork, not upstream coollabs/coolify,
+always pulling that fork's latest commit. Opens ports `80, 443, 8000, 6001, 6002`,
+plus `3000-3020` reserved for apps you deploy
 that need a port of their own (a custom backend service, etc.) — no extra firewall
 step needed when one of your deployments needs a port in that range. Coolify's
 containers are left **uncapped** — it gets resource priority over everything else
